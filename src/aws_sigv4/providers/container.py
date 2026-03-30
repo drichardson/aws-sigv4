@@ -32,22 +32,16 @@ from aws_sigv4.credentials import Credentials
 
 logger = logging.getLogger(__name__)
 
-_ECS_METADATA_HOST = "http://169.254.170.2"
-_FULL_URI_ALLOWLIST_PREFIXES = (
-    "http://169.254.170.2",
-    "https://",
-)
-
 
 class ContainerProvider:
     """
-    Load credentials from the ECS task metadata endpoint.
+    Load credentials from the container credential endpoint.
 
     Reads one of:
     - ``AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`` — path relative to
       ``http://169.254.170.2``
     - ``AWS_CONTAINER_CREDENTIALS_FULL_URI`` — full URL (must be HTTPS or
-      the ECS link-local address)
+      the link-local address)
     """
 
     def load(self) -> Credentials | None:
@@ -55,9 +49,11 @@ class ContainerProvider:
         full_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
 
         if relative_uri:
-            url = f"{_ECS_METADATA_HOST}{relative_uri}"
+            url = f"http://169.254.170.2{relative_uri}"
         elif full_uri:
-            if not any(full_uri.startswith(p) for p in _FULL_URI_ALLOWLIST_PREFIXES):
+            if not any(
+                full_uri.startswith(p) for p in ("http://169.254.170.2", "https://")
+            ):
                 logger.warning(
                     "AWS_CONTAINER_CREDENTIALS_FULL_URI %r is not an allowed "
                     "prefix; skipping container credential provider.",
