@@ -221,8 +221,8 @@ expire and before Kubernetes rotates the token file.
 
 ## Dependencies
 
-**Runtime:** none — pure Python stdlib only (`hashlib`, `hmac`, `urllib`,
-`xml.etree`, `configparser`, `threading`, `datetime`)
+**Python package dependencies:** none — pure stdlib only (`hashlib`, `hmac`,
+`urllib`, `xml.etree`, `configparser`, `threading`, `datetime`)
 
 **Dev:** `pytest`, `mypy`, `ruff`
 

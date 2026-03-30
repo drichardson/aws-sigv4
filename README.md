@@ -2,7 +2,7 @@
 
 Sign AWS HTTP requests with AWS Signature Version 4 — no `boto3` or `botocore` required.
 
-Supports IRSA (IAM Roles for Service Accounts on EKS), ECS task roles, EC2 instance profiles, environment variables, and `~/.aws/credentials`. Zero runtime dependencies (pure Python stdlib).
+Supports IRSA (IAM Roles for Service Accounts on EKS), ECS task roles, EC2 instance profiles, environment variables, and `~/.aws/credentials`. Zero Python package dependencies (pure stdlib).
 
 ## Installation
 
