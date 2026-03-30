@@ -31,22 +31,25 @@ def load_from_config_file() -> Credentials | None:
     config_file = Path(os.environ.get("AWS_CONFIG_FILE", "~/.aws/config")).expanduser()
 
     # Try credentials file (sections are bare profile names).
-    creds = _read_credentials_from_file(creds_file, profile)
-    if creds:
-        return creds
+    if creds_file.exists():
+        creds = _read_credentials_from_file(creds_file, profile)
+        if creds:
+            return creds
 
     # Try config file (sections are "profile <name>", except "default").
     config_section = "default" if profile == "default" else f"profile {profile}"
-    return _read_credentials_from_file(config_file, config_section)
+    if config_file.exists():
+        return _read_credentials_from_file(config_file, config_section)
+
+    return None
 
 
 def _read_credentials_from_file(path: Path, section: str) -> Credentials | None:
-    if not path.exists():
-        return None
-
-    # If the file exists but can't be parsed, let the exception propagate —
-    # a malformed credentials file is a configuration error the user should
-    # fix, not something to silently skip.
+    """Parse ``path`` and return credentials for ``section``, or ``None`` if
+    the section or keys are absent. Raises ``configparser.Error`` if the file
+    exists but cannot be parsed — callers must check existence before calling."""
+    # If the file can't be parsed, let the exception propagate — a malformed
+    # credentials file is a configuration error the user should fix.
     parser = configparser.ConfigParser()
     parser.read(path)
 
