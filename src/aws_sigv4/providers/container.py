@@ -87,8 +87,12 @@ def _parse_container_response(data: dict) -> Credentials:
     expiration = data.get("Expiration") or data.get("expiration")
 
     if not access_key or not secret_key:
+        # Do not include the response body in the message — it may contain
+        # a session token or other credential material.
+        keys = list(data.keys())
         raise RuntimeError(
-            f"Container credentials response missing AccessKeyId/SecretAccessKey: {data}"
+            f"Container credentials response missing AccessKeyId/SecretAccessKey. "
+            f"Keys present: {keys}"
         )
 
     expires_at: datetime | None = None
