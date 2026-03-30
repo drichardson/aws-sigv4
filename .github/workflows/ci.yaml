@@ -2,6 +2,9 @@ name: ci
 
 on: [push]
 
+env:
+  UV_NO_PROGRESS: "1"
+
 jobs:
   tests:
     runs-on: ubuntu-latest
