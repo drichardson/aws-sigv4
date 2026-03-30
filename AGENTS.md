@@ -16,6 +16,9 @@ task check         # run all of the above
 
 All tasks are defined in ``Taskfile.dist.yaml``. CI uses the same tasks.
 
+Run ``task install-git-hooks`` once after cloning to install a pre-push hook
+that runs ``task pre-push`` (test, lint, typecheck) before every push.
+
 ## Conventions
 
 - **Python 3.14+** — use modern syntax: `type` aliases, `match` statements.
