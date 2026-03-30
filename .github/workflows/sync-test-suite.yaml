@@ -1,0 +1,30 @@
+name: sync-test-suite
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # 1st of each month at midnight UTC
+  workflow_dispatch:       # manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # Need full history so we can create branches and push
+        fetch-depth: 0
+
+    - name: Configure git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Run sync script
+      run: scripts/sync-aws-test-suite.sh
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

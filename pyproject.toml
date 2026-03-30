@@ -1,0 +1,41 @@
+[project]
+name = "aws-sigv4"
+version = "0.1.0"
+description = "AWS Signature Version 4 request signing with IRSA credential support. No boto3 required."
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Doug Richardson", email = "git@rekt.email" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+keywords = ["aws", "sigv4", "signing", "irsa", "authentication"]
+
+[project.urls]
+Documentation = "https://github.com/drichardson/aws-sigv4"
+Issues = "https://github.com/drichardson/aws-sigv4/issues"
+Source = "https://github.com/drichardson/aws-sigv4.git"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "mypy>=1.0.0",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff.lint]
+ignore = ["G004"]

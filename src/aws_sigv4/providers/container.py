@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: 2025-present Doug Richardson <git@rekt.email>
+# SPDX-License-Identifier: MIT
+
+"""
+Credential provider: ECS container task role.
+
+When running inside an ECS task with an IAM task role, the ECS agent exposes
+a local HTTP endpoint that vends temporary credentials. The endpoint URI is
+injected via environment variable.
+
+Reference:
+  https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html
+"""
+
+import json
+import logging
+import os
+import urllib.error
+import urllib.request
+from datetime import UTC, datetime
+
+from aws_sigv4.credentials import Credentials
+
+logger = logging.getLogger(__name__)
+
+_ECS_METADATA_HOST = "http://169.254.170.2"
+_FULL_URI_ALLOWLIST_PREFIXES = (
+    "http://169.254.170.2",
+    "https://",
+)
+
+
+class ContainerProvider:
+    """
+    Load credentials from the ECS task metadata endpoint.
+
+    Reads one of:
+    - ``AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`` — path relative to
+      ``http://169.254.170.2``
+    - ``AWS_CONTAINER_CREDENTIALS_FULL_URI`` — full URL (must be HTTPS or
+      the ECS link-local address)
+    """
+
+    def load(self) -> Credentials | None:
+        relative_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+        full_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
+
+        if relative_uri:
+            url = f"{_ECS_METADATA_HOST}{relative_uri}"
+        elif full_uri:
+            if not any(full_uri.startswith(p) for p in _FULL_URI_ALLOWLIST_PREFIXES):
+                logger.warning(
+                    "AWS_CONTAINER_CREDENTIALS_FULL_URI %r is not an allowed "
+                    "prefix; skipping container credential provider.",
+                    full_uri,
+                )
+                return None
+            url = full_uri
+        else:
+            return None
+
+        auth_token = os.environ.get("AWS_CONTAINER_AUTHORIZATION_TOKEN")
+        headers: dict[str, str] = {}
+        if auth_token:
+            headers["Authorization"] = auth_token
+
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+        except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
+            raise RuntimeError(
+                f"Failed to fetch container credentials from {url!r}: {e}"
+            ) from e
+
+        return _parse_container_response(data)
+
+
+def _parse_container_response(data: dict) -> Credentials:
+    access_key = data.get("AccessKeyId") or data.get("access_key_id")
+    secret_key = data.get("SecretAccessKey") or data.get("secret_access_key")
+    token = data.get("Token") or data.get("token")
+    expiration = data.get("Expiration") or data.get("expiration")
+
+    if not access_key or not secret_key:
+        raise RuntimeError(
+            f"Container credentials response missing AccessKeyId/SecretAccessKey: {data}"
+        )
+
+    expires_at: datetime | None = None
+    if expiration:
+        expires_at = datetime.fromisoformat(expiration.replace("Z", "+00:00"))
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+
+    return Credentials(
+        access_key=access_key,
+        secret_key=secret_key,
+        token=token or None,
+        expires_at=expires_at,
+    )
