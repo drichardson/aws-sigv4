@@ -7,28 +7,39 @@ Two layers of tests:
 
 1. Unit tests for ``_is_not_present`` — verify each errno is classified correctly.
 
-2. Integration tests using a real local HTTP server (pytest fixtures) — verify
-   that ``try_load_from_imds`` behaves correctly end-to-end when the server is:
-   - not running (connection refused)      → return None
-   - running but timing out               → raise
-   - running and returning valid creds    → return Credentials
-   - running but returning a bad response → raise
+2. Integration tests using ``pytest-httpserver`` (a real local HTTP server) —
+   verify that ``try_load_from_imds`` behaves correctly end-to-end. The
+   session-scoped server starts once for the entire test run; ``httpserver``
+   clears expectations between tests automatically.
+
+Connection-refused tests use a bare port with nothing listening — these cannot
+use ``httpserver`` by design, since we need the connection to be rejected.
 """
 
 import errno
-import json
 import socket
-import threading
 import urllib.error
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 from aws_sigv4.providers.imds import _is_not_present, try_load_from_imds
 
+# ---------------------------------------------------------------------------
+# Valid IMDS response bodies
+# ---------------------------------------------------------------------------
+
+_ROLE_NAME = "test-role"
+_CREDS_JSON = {
+    "Code": "Success",
+    "AccessKeyId": "IMDS_AKID",
+    "SecretAccessKey": "IMDS_SECRET",
+    "Token": "IMDS_TOKEN",
+    "Expiration": "2099-01-01T00:00:00Z",
+}
+
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Unit tests: _is_not_present
 # ---------------------------------------------------------------------------
 
 
@@ -37,11 +48,6 @@ def _url_error(err: int) -> urllib.error.URLError:
     inner = OSError(err, errno.errorcode.get(err, str(err)))
     inner.errno = err
     return urllib.error.URLError(inner)
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: _is_not_present
-# ---------------------------------------------------------------------------
 
 
 def test_connection_refused_is_not_present():
@@ -57,130 +63,53 @@ def test_host_unreachable_is_not_present():
 
 
 def test_timeout_is_not_not_present():
-    """A timeout means something is there but not responding — should raise."""
+    """A timeout means something is there but not responding -- should raise."""
     assert not _is_not_present(_url_error(errno.ETIMEDOUT))
 
 
 def test_generic_oserror_is_not_not_present():
-    """A generic OSError (e.g. EIO) is not in the not-present set — should raise."""
+    """A generic OSError (e.g. EIO) is not in the not-present set -- should raise."""
     assert not _is_not_present(_url_error(errno.EIO))
 
 
 # ---------------------------------------------------------------------------
-# Local IMDS server fixtures
+# Helpers for httpserver-based tests
 # ---------------------------------------------------------------------------
 
-# Minimal IMDSv2 responses.
-_ROLE_NAME = "test-role"
-_CREDS_RESPONSE = {
-    "Code": "Success",
-    "AccessKeyId": "IMDS_AKID",
-    "SecretAccessKey": "IMDS_SECRET",
-    "Token": "IMDS_TOKEN",
-    "Expiration": "2099-01-01T00:00:00Z",
-}
+
+def _register_imds(httpserver, role_name=_ROLE_NAME, creds=None):
+    """Register the three IMDSv2 endpoints on httpserver."""
+    if creds is None:
+        creds = _CREDS_JSON
+    httpserver.expect_ordered_request(
+        "/latest/api/token", method="PUT"
+    ).respond_with_data("test-imds-token")
+    httpserver.expect_ordered_request(
+        "/latest/meta-data/iam/security-credentials/"
+    ).respond_with_data(role_name)
+    httpserver.expect_ordered_request(
+        f"/latest/meta-data/iam/security-credentials/{role_name}"
+    ).respond_with_json(creds)
 
 
-class _IMDSHandler(BaseHTTPRequestHandler):
-    """Minimal IMDSv2 handler serving the token and credentials endpoints."""
-
-    def log_message(self, format, *args):  # noqa: A002
-        pass  # suppress request logging in test output
-
-    def do_PUT(self):
-        # Token endpoint.
-        if self.path == "/latest/api/token":
-            ttl = self.headers.get("X-aws-ec2-metadata-token-ttl-seconds", "")
-            if not ttl:
-                self.send_response(400)
-                self.end_headers()
-                return
-            token = "test-imds-token"
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(token.encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_GET(self):
-        token = self.headers.get("X-aws-ec2-metadata-token", "")
-        if not token:
-            self.send_response(401)
-            self.end_headers()
-            return
-
-        if self.path == "/latest/meta-data/iam/security-credentials/":
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(_ROLE_NAME.encode())
-
-        elif self.path == f"/latest/meta-data/iam/security-credentials/{_ROLE_NAME}":
-            body = json.dumps(_CREDS_RESPONSE).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(body)
-
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-
-def _free_port() -> int:
-    """Find a free TCP port on localhost."""
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-@pytest.fixture()
-def imds_server(monkeypatch):
-    """
-    Start a real local HTTP server simulating IMDS and point the provider at it.
-    Yields the server address as ``(host, port)``.
-    """
-    port = _free_port()
-    server = HTTPServer(("127.0.0.1", port), _IMDSHandler)
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
-    thread.start()
-
+@pytest.fixture(autouse=True)
+def _point_imds_at_httpserver(httpserver, monkeypatch):
+    """Point the IMDS provider at the local httpserver for every test in this module."""
     monkeypatch.setattr(
         "aws_sigv4.providers.imds._IMDS_BASE",
-        f"http://127.0.0.1:{port}/latest",
+        httpserver.url_for("/latest"),
     )
     monkeypatch.setattr("aws_sigv4.providers.imds._CONNECT_TIMEOUT", 2)
 
-    yield ("127.0.0.1", port)
-
-    server.shutdown()
-    thread.join(timeout=2)
-
-
-@pytest.fixture()
-def imds_server_port(monkeypatch):
-    """
-    Return a port with nothing listening on it (connection refused), and point
-    the provider at it.
-    """
-    port = _free_port()
-    # Do NOT start a server — the port is free but nothing is listening.
-    monkeypatch.setattr(
-        "aws_sigv4.providers.imds._IMDS_BASE",
-        f"http://127.0.0.1:{port}/latest",
-    )
-    monkeypatch.setattr("aws_sigv4.providers.imds._CONNECT_TIMEOUT", 2)
-    return port
-
 
 # ---------------------------------------------------------------------------
-# Integration tests: try_load_from_imds with real server
+# Integration tests: try_load_from_imds with real httpserver
 # ---------------------------------------------------------------------------
 
 
-def test_returns_credentials_when_server_running(imds_server):
-    """Server is up and returns valid credentials — should return Credentials."""
+def test_returns_credentials_when_server_running(httpserver):
+    """Server is up and returns valid credentials -- should return Credentials."""
+    _register_imds(httpserver)
     creds = try_load_from_imds()
     assert creds is not None
     assert creds.access_key == "IMDS_AKID"
@@ -189,50 +118,61 @@ def test_returns_credentials_when_server_running(imds_server):
     assert creds.expires_at is not None
 
 
-def test_returns_none_when_connection_refused(imds_server_port):
-    """Nothing listening on the port — connection refused → return None."""
-    result = try_load_from_imds()
-    assert result is None
+def test_returns_none_when_no_role_attached(httpserver):
+    """Server is up but security-credentials endpoint returns 404 (no role)."""
+    httpserver.expect_ordered_request(
+        "/latest/api/token", method="PUT"
+    ).respond_with_data("test-imds-token")
+    httpserver.expect_ordered_request(
+        "/latest/meta-data/iam/security-credentials/"
+    ).respond_with_data("", status=404)
+    assert try_load_from_imds() is None
 
 
-def test_raises_when_server_returns_bad_credentials(imds_server, monkeypatch):
-    """Server is up but returns a malformed credentials response — should raise."""
+def test_raises_when_credentials_response_missing_keys(httpserver):
+    """Server returns a JSON response missing AccessKeyId -- should raise."""
+    httpserver.expect_ordered_request(
+        "/latest/api/token", method="PUT"
+    ).respond_with_data("test-imds-token")
+    httpserver.expect_ordered_request(
+        "/latest/meta-data/iam/security-credentials/"
+    ).respond_with_data(_ROLE_NAME)
+    httpserver.expect_ordered_request(
+        f"/latest/meta-data/iam/security-credentials/{_ROLE_NAME}"
+    ).respond_with_json({"Code": "Success"})
 
-    class _BadHandler(BaseHTTPRequestHandler):
-        def log_message(self, format, *args):  # noqa: A002
-            pass
+    with pytest.raises(RuntimeError, match="AccessKeyId"):
+        try_load_from_imds()
 
-        def do_PUT(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"test-token")
 
-        def do_GET(self):
-            if self.path.endswith("/security-credentials/"):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"bad-role")
-            else:
-                # Return JSON missing the required fields.
-                body = json.dumps({"Code": "Success"}).encode()
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(body)
+def test_raises_when_credentials_code_not_success(httpserver):
+    """Server returns Code != Success -- should raise."""
+    httpserver.expect_ordered_request(
+        "/latest/api/token", method="PUT"
+    ).respond_with_data("test-imds-token")
+    httpserver.expect_ordered_request(
+        "/latest/meta-data/iam/security-credentials/"
+    ).respond_with_data(_ROLE_NAME)
+    httpserver.expect_ordered_request(
+        f"/latest/meta-data/iam/security-credentials/{_ROLE_NAME}"
+    ).respond_with_json({"Code": "Failed"})
 
-    port = _free_port()
-    server = HTTPServer(("127.0.0.1", port), _BadHandler)
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
-    thread.start()
+    with pytest.raises(RuntimeError, match="non-success code"):
+        try_load_from_imds()
 
+
+def test_returns_none_when_connection_refused(monkeypatch):
+    """Nothing listening on the port -- connection refused -> return None.
+
+    This test intentionally does NOT use httpserver -- we need a port with
+    nothing listening to provoke ECONNREFUSED.
+    """
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    # Socket released; nothing is listening on that port now.
     monkeypatch.setattr(
         "aws_sigv4.providers.imds._IMDS_BASE",
         f"http://127.0.0.1:{port}/latest",
     )
-
-    try:
-        with pytest.raises(RuntimeError):
-            try_load_from_imds()
-    finally:
-        server.shutdown()
-        thread.join(timeout=2)
+    assert try_load_from_imds() is None

@@ -165,12 +165,13 @@ class RefreshableCredentials:
 
     def _do_refresh(self) -> None:
         with self._lock:
-            # Double-checked locking: another thread may have refreshed while
-            # we were waiting for the lock.
+            # Double-checked locking: another thread may have already refreshed
+            # while we were waiting for the lock. Only skip if the credentials
+            # are now comfortably outside the advisory window.
             creds = self._credentials
             if creds is not None and creds.expires_at is not None:
                 remaining = (creds.expires_at - datetime.now(UTC)).total_seconds()
-                if remaining > _MANDATORY_REFRESH_SECONDS:
+                if remaining > _ADVISORY_REFRESH_SECONDS:
                     return
 
             new_creds = self._provider()

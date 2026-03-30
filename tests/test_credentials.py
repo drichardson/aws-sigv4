@@ -142,3 +142,104 @@ def test_concurrent_gets_return_same_credentials():
     assert len(results) == 10
     # All threads should have gotten valid credentials.
     assert all(r.access_key == "AKI" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Refresh window behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_advisory_window_triggers_refresh():
+    """Credentials in advisory window (10-15 min) should trigger a refresh."""
+    refresh_count = 0
+    old_creds = _make_expiring_creds(12 * 60)  # 12 min — inside advisory window
+    new_creds = Credentials(access_key="NEW", secret_key="newsecret")
+
+    def provider():
+        nonlocal refresh_count
+        refresh_count += 1
+        return new_creds
+
+    rc = RefreshableCredentials(provider)
+    rc._credentials = old_creds  # bypass initial fetch, put in advisory window
+
+    result = rc.get()
+    assert refresh_count == 1
+    assert result.access_key == "NEW"
+
+
+def test_advisory_window_uses_cached_when_refresh_fails():
+    """In advisory window, if refresh fails the still-valid cached creds are returned."""
+    old_creds = _make_expiring_creds(12 * 60)  # in advisory window
+
+    def failing_provider():
+        raise RuntimeError("STS unavailable")
+
+    rc = RefreshableCredentials(failing_provider)
+    rc._credentials = old_creds
+
+    # Should NOT raise — advisory window allows fallback to cached.
+    result = rc.get()
+    assert result is old_creds
+
+
+def test_mandatory_window_blocks_until_refreshed():
+    """Credentials in mandatory window (< 10 min) must block and refresh."""
+    refresh_count = 0
+    old_creds = _make_expiring_creds(8 * 60)  # 8 min — inside mandatory window
+    new_creds = Credentials(access_key="FRESH", secret_key="fresher")
+
+    def provider():
+        nonlocal refresh_count
+        refresh_count += 1
+        return new_creds
+
+    rc = RefreshableCredentials(provider)
+    rc._credentials = old_creds
+
+    result = rc.get()
+    assert refresh_count == 1
+    assert result.access_key == "FRESH"
+
+
+def test_mandatory_window_raises_when_refresh_fails():
+    """In mandatory window, if refresh fails the error must propagate."""
+    old_creds = _make_expiring_creds(8 * 60)  # in mandatory window
+
+    def failing_provider():
+        raise RuntimeError("cannot refresh")
+
+    rc = RefreshableCredentials(failing_provider)
+    rc._credentials = old_creds
+
+    with pytest.raises(RuntimeError, match="cannot refresh"):
+        rc.get()
+
+
+def test_hard_expired_forces_refresh():
+    """Credentials past expiry must be refreshed regardless."""
+    expired_creds = _make_expiring_creds(-60)  # expired 60s ago
+    new_creds = Credentials(access_key="RENEWED", secret_key="renewed")
+
+    rc = RefreshableCredentials(lambda: new_creds)
+    rc._credentials = expired_creds
+
+    result = rc.get()
+    assert result.access_key == "RENEWED"
+
+
+def test_no_refresh_when_credentials_are_fresh():
+    """Credentials with > 15 min remaining must be returned without refresh."""
+    refresh_count = 0
+    fresh_creds = _make_expiring_creds(30 * 60)  # 30 min remaining
+
+    def provider():
+        nonlocal refresh_count
+        refresh_count += 1
+        return fresh_creds
+
+    rc = RefreshableCredentials(provider)
+    rc._credentials = fresh_creds  # pre-load
+
+    rc.get()
+    assert refresh_count == 0  # no refresh should have occurred

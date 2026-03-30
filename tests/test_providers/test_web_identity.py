@@ -10,6 +10,8 @@ import pytest
 from aws_sigv4.providers.web_identity import WebIdentityProvider, _parse_sts_response
 
 
+_ROLE_ARN = "arn:aws:iam::123456789012:role/MyRole"
+
 _STS_RESPONSE = b"""
 <AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
   <AssumeRoleWithWebIdentityResult>
@@ -17,10 +19,20 @@ _STS_RESPONSE = b"""
       <AccessKeyId>STS_AKID</AccessKeyId>
       <SecretAccessKey>STS_SECRET</SecretAccessKey>
       <SessionToken>STS_TOKEN</SessionToken>
-      <Expiration>2026-03-29T12:00:00Z</Expiration>
+      <Expiration>2099-01-01T00:00:00Z</Expiration>
     </Credentials>
   </AssumeRoleWithWebIdentityResult>
 </AssumeRoleWithWebIdentityResponse>
+"""
+
+_STS_ERROR_RESPONSE = b"""
+<ErrorResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+  <Error>
+    <Type>Sender</Type>
+    <Code>AccessDenied</Code>
+    <Message>Not authorized to assume role</Message>
+  </Error>
+</ErrorResponse>
 """
 
 
@@ -70,7 +82,103 @@ def test_load_calls_sts(monkeypatch, tmp_path):
 
 def test_token_file_not_found_raises(monkeypatch):
     monkeypatch.setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/nonexistent/token")
-    monkeypatch.setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/MyRole")
+    monkeypatch.setenv("AWS_ROLE_ARN", _ROLE_ARN)
 
     with pytest.raises(RuntimeError, match="Failed to read web identity token file"):
         WebIdentityProvider().try_load()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests using a real local STS server (pytest-httpserver)
+# ---------------------------------------------------------------------------
+
+
+def _make_provider(httpserver, tmp_path, token="myjwt"):
+    """Create a WebIdentityProvider pointed at the local httpserver."""
+    token_file = tmp_path / "token"
+    token_file.write_text(token)
+    return WebIdentityProvider(
+        token_file=str(token_file),
+        role_arn=_ROLE_ARN,
+        sts_endpoint=httpserver.url_for("/"),
+    )
+
+
+def test_sts_valid_response_returns_credentials(httpserver, tmp_path):
+    """Valid STS XML response -> Credentials with correct fields."""
+    httpserver.expect_request("/", method="POST").respond_with_data(
+        _STS_RESPONSE, content_type="text/xml"
+    )
+    creds = _make_provider(httpserver, tmp_path).try_load()
+    assert creds is not None
+    assert creds.access_key == "STS_AKID"
+    assert creds.secret_key == "STS_SECRET"
+    assert creds.token == "STS_TOKEN"
+    assert creds.expires_at is not None
+
+
+def test_sts_403_raises(httpserver, tmp_path):
+    """STS returns HTTP 403 -- provider available but broken -- should raise."""
+    httpserver.expect_request("/", method="POST").respond_with_data(
+        _STS_ERROR_RESPONSE, status=403, content_type="text/xml"
+    )
+    with pytest.raises(RuntimeError, match="403"):
+        _make_provider(httpserver, tmp_path).try_load()
+
+
+def test_sts_malformed_xml_raises(httpserver, tmp_path):
+    """STS returns malformed XML -- should raise."""
+    httpserver.expect_request("/", method="POST").respond_with_data(
+        b"<not valid xml", content_type="text/xml"
+    )
+    with pytest.raises(Exception):
+        _make_provider(httpserver, tmp_path).try_load()
+
+
+def test_sts_receives_web_identity_token(httpserver, tmp_path):
+    """The JWT from the token file must be sent to STS as WebIdentityToken."""
+    received_bodies = []
+
+    def handler(request):
+        received_bodies.append(request.get_data(as_text=True))
+        from werkzeug.wrappers import Response
+
+        return Response(_STS_RESPONSE, content_type="text/xml")
+
+    httpserver.expect_request("/", method="POST").respond_with_handler(handler)
+    _make_provider(httpserver, tmp_path, token="my-k8s-jwt").try_load()
+
+    assert len(received_bodies) == 1
+    assert "WebIdentityToken=my-k8s-jwt" in received_bodies[0]
+
+
+def test_token_file_reread_on_each_call(httpserver, tmp_path):
+    """Token file must be re-read on every call (Kubernetes rotates it)."""
+    received_bodies = []
+
+    def handler(request):
+        received_bodies.append(request.get_data(as_text=True))
+        from werkzeug.wrappers import Response
+
+        return Response(_STS_RESPONSE, content_type="text/xml")
+
+    # Use expect_request (not ordered) so it matches multiple POST calls.
+    httpserver.expect_request("/", method="POST").respond_with_handler(handler)
+
+    token_file = tmp_path / "token"
+    token_file.write_text("original-token")
+    provider = WebIdentityProvider(
+        token_file=str(token_file),
+        role_arn=_ROLE_ARN,
+        sts_endpoint=httpserver.url_for("/"),
+    )
+
+    provider.try_load()
+    assert "WebIdentityToken=original-token" in received_bodies[0]
+
+    # Simulate Kubernetes rotating the token.
+    token_file.write_text("rotated-token")
+    provider.try_load()
+
+    assert len(received_bodies) == 2
+    assert "WebIdentityToken=rotated-token" in received_bodies[1]

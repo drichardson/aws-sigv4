@@ -30,6 +30,10 @@ from aws_sigv4.credentials import Credentials, parse_utc_datetime
 
 logger = logging.getLogger(__name__)
 
+# ECS link-local metadata host for relative URI credentials.
+# https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html
+_ECS_METADATA_HOST = "http://169.254.170.2"
+
 
 def try_load_from_container() -> Credentials | None:
     """
@@ -46,10 +50,11 @@ def try_load_from_container() -> Credentials | None:
     full_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
 
     if relative_uri:
-        url = f"http://169.254.170.2{relative_uri}"
+        url = f"{_ECS_METADATA_HOST}{relative_uri}"
     elif full_uri:
         if not any(
-            full_uri.startswith(p) for p in ("http://169.254.170.2", "https://")
+            full_uri.startswith(p)
+            for p in (_ECS_METADATA_HOST, "http://127.0.0.1", "https://")
         ):
             logger.warning(
                 "AWS_CONTAINER_CREDENTIALS_FULL_URI %r is not an allowed "
