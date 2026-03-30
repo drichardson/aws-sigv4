@@ -71,9 +71,8 @@ headers = signer.sign(method="GET", url="https://s3.us-east-1.amazonaws.com/my-b
 
 ## SigV4 Signing Algorithm (`signing.py`)
 
-Implements the AWS Signature Version 4 specification exactly, reverse-engineered
-from `botocore/auth.py`. All logic is pure Python stdlib (`hashlib`, `hmac`,
-`urllib.parse`).
+Implements the AWS Signature Version 4 specification. All logic is pure Python
+stdlib (`hashlib`, `hmac`, `urllib.parse`).
 
 Steps:
 
