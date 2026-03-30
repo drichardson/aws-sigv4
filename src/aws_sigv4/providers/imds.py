@@ -8,13 +8,18 @@ Uses the two-step IMDSv2 token-based protocol:
   1. PUT /latest/api/token → receive a session token (TTL 21600s = 6h)
   2. GET /latest/meta-data/iam/security-credentials/<role> with the token
 
-Only active when running on an EC2 instance. On non-EC2 hosts the PUT will
-time out quickly (1-second timeout).
+On non-EC2 hosts, ``169.254.169.254`` is not routable and the connection is
+refused or the address is unreachable immediately — these indicate IMDS is not
+present and the provider returns ``None``.
+
+A timeout means something is at that address but not responding promptly —
+this is treated as an error (IMDS present but broken) and propagates.
 
 Reference:
   https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
 """
 
+import errno
 import json
 import logging
 import urllib.error
@@ -34,14 +39,16 @@ def load_from_imds() -> Credentials | None:
     """
     Load credentials from the EC2 Instance Metadata Service (IMDSv2).
 
-    Only succeeds when running on an EC2 instance. Times out quickly
-    (1 second) on other hosts so it doesn't slow down the credential chain.
+    Returns ``None`` if IMDS is not present (connection refused or address
+    unreachable — indicates a non-EC2 host). Raises if IMDS appears to be
+    present but is not responding correctly (timeout, HTTP error, etc.).
     """
     try:
         imds_token = _get_imds_token()
-    except urllib.error.URLError, OSError:
-        # Not on EC2, or IMDS disabled — skip silently.
-        return None
+    except OSError as e:
+        if _is_not_present(e):
+            return None
+        raise
 
     try:
         role_name = _get_role_name(imds_token)
@@ -50,6 +57,25 @@ def load_from_imds() -> Credentials | None:
         return None
 
     return _get_role_credentials(imds_token, role_name)
+
+
+def _is_not_present(exc: OSError) -> bool:
+    """
+    Return True if the exception indicates IMDS is simply not present on
+    this host (connection refused, network unreachable, host unreachable).
+    These are expected on non-EC2 hosts and should be treated as
+    "provider not available" rather than an error.
+    """
+    not_present_errnos = {
+        errno.ECONNREFUSED,  # connection refused — nothing listening
+        errno.ENETUNREACH,  # network unreachable
+        errno.EHOSTUNREACH,  # host unreachable
+        getattr(errno, "ENONET", None),  # no route to host (Linux only)
+    }
+    not_present_errnos.discard(None)
+    # urllib wraps socket errors in URLError; unwrap to get the errno.
+    cause = exc.__cause__ if exc.__cause__ is not None else exc
+    return getattr(cause, "errno", None) in not_present_errnos
 
 
 def _get_imds_token() -> str:

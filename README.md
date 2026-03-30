@@ -24,10 +24,8 @@ signer = Signer(region="us-east-1", service="execute-api")
 signer.credentials.refresh()
 
 # Later, sign any HTTP request:
-auth_headers = signer.sign(
-    method="GET",
-    url="https://api-id.execute-api.us-east-1.amazonaws.com/stage/resource",
-)
+url = "https://api-id.execute-api.us-east-1.amazonaws.com/stage/resource"
+auth_headers = signer.sign(method="GET", url=url)
 
 # Merge auth_headers into your request:
 async with aiohttp.ClientSession() as session:

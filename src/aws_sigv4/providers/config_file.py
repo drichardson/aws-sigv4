@@ -44,11 +44,11 @@ def _read_credentials_from_file(path: Path, section: str) -> Credentials | None:
     if not path.exists():
         return None
 
+    # If the file exists but can't be parsed, let the exception propagate —
+    # a malformed credentials file is a configuration error the user should
+    # fix, not something to silently skip.
     parser = configparser.ConfigParser()
-    try:
-        parser.read(path)
-    except configparser.Error:
-        return None
+    parser.read(path)
 
     if not parser.has_section(section):
         return None

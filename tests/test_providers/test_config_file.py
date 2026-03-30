@@ -4,6 +4,7 @@
 import textwrap
 from pathlib import Path
 
+import pytest
 
 from aws_sigv4.providers.config_file import load_from_config_file
 
@@ -102,3 +103,51 @@ def test_falls_back_to_config_file(tmp_path, monkeypatch):
     creds = load_from_config_file()
     assert creds is not None
     assert creds.access_key == "CONFIG_AKID"
+
+
+def test_malformed_credentials_file_raises(tmp_path, monkeypatch):
+    """A credentials file that exists but cannot be parsed must raise, not return None."""
+    import configparser
+
+    creds_file = tmp_path / "credentials"
+    # A line without a section header is invalid INI — configparser raises
+    # MissingSectionHeaderError (a subclass of configparser.Error).
+    creds_file.write_text("aws_access_key_id = AKID\n")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "config"))
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+    with pytest.raises(configparser.Error):
+        load_from_config_file()
+
+
+def test_malformed_config_file_raises(tmp_path, monkeypatch):
+    """A config file that exists but cannot be parsed must raise, not return None."""
+    import configparser
+
+    config_file = tmp_path / "config"
+    config_file.write_text("this is not valid ini = \n[broken\n")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "credentials"))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(config_file))
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+
+    with pytest.raises(configparser.Error):
+        load_from_config_file()
+
+
+def test_missing_profile_returns_none(tmp_path, monkeypatch):
+    """A valid file that doesn't contain the requested profile returns None."""
+    creds_file = _write(
+        tmp_path,
+        "credentials",
+        """
+        [other-profile]
+        aws_access_key_id = AKID
+        aws_secret_access_key = secret
+        """,
+    )
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "config"))
+    monkeypatch.setenv("AWS_PROFILE", "nonexistent")
+
+    assert load_from_config_file() is None

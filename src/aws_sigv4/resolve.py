@@ -71,15 +71,7 @@ class _ChainProvider:
 
     def __call__(self):
         for provider in self._providers:
-            try:
-                creds = provider()
-            except Exception:
-                logger.debug(
-                    "Credential provider %s raised an exception; skipping.",
-                    provider.__name__,
-                    exc_info=True,
-                )
-                continue
+            creds = provider()
             if creds is not None:
                 logger.debug("Credentials resolved via %s.", provider.__name__)
                 return creds

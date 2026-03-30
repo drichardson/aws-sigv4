@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2025-present Doug Richardson <git@rekt.email>
+# SPDX-License-Identifier: MIT
+
+"""Tests for the credential chain (_ChainProvider) error propagation behaviour.
+
+Key invariants:
+- Provider returns None → chain moves to the next provider
+- Provider raises → exception propagates to the caller (chain does not swallow it)
+- All providers return None → RuntimeError with a helpful message
+"""
+
+import pytest
+
+from aws_sigv4.credentials import Credentials
+from aws_sigv4.resolve import resolve_credentials
+
+
+_CREDS = Credentials(access_key="AKID", secret_key="secret")
+
+
+def test_chain_returns_first_match():
+    creds = resolve_credentials(providers=[lambda: None, lambda: _CREDS])
+    assert creds.get().access_key == "AKID"
+
+
+def test_chain_skips_none_providers():
+    """Providers returning None are skipped; the first non-None result wins."""
+    order = []
+
+    def first():
+        order.append("first")
+        return None
+
+    def second():
+        order.append("second")
+        return _CREDS
+
+    def third():
+        order.append("third")
+        return None
+
+    creds = resolve_credentials(providers=[first, second, third])
+    creds.get()
+    assert order == ["first", "second"]
+
+
+def test_chain_raises_when_all_providers_return_none():
+    """If every provider returns None a RuntimeError is raised."""
+    rc = resolve_credentials(providers=[lambda: None, lambda: None])
+    with pytest.raises(RuntimeError, match="No AWS credentials found"):
+        rc.get()
+
+
+def test_chain_propagates_provider_exception():
+    """A provider that raises must not be silently swallowed by the chain."""
+
+    def broken():
+        raise ValueError("config file is malformed")
+
+    rc = resolve_credentials(providers=[broken])
+    with pytest.raises(ValueError, match="config file is malformed"):
+        rc.get()
+
+
+def test_chain_does_not_continue_after_exception():
+    """Once a provider raises, subsequent providers must not be called."""
+    called = []
+
+    def broken():
+        raise RuntimeError("broken")
+
+    def should_not_be_called():
+        called.append(True)
+        return _CREDS
+
+    rc = resolve_credentials(providers=[broken, should_not_be_called])
+    with pytest.raises(RuntimeError):
+        rc.get()
+
+    assert called == [], "provider after a raising provider must not be called"
