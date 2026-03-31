@@ -17,6 +17,7 @@ The suite uses:
 
 from datetime import UTC, datetime
 
+import pytest
 
 from aws_sigv4 import Credentials, sign_headers
 from aws_sigv4.signing import (
@@ -109,7 +110,7 @@ def test_canonical_headers_whitespace_collapsed():
     assert result == "my-header:value with spaces"
 
 
-def test_canonical_headers_blacklisted_excluded():
+def test_canonical_headers_excludes_ignored_headers():
     hdrs = {
         "host": "example.com",
         "user-agent": "should-be-excluded",
@@ -121,7 +122,7 @@ def test_canonical_headers_blacklisted_excluded():
     assert "host:example.com" in result
 
 
-def test_signed_headers_excludes_blacklist():
+def test_signed_headers_excludes_ignored_headers():
     hdrs = {
         "host": "example.com",
         "x-amz-date": "20150830T123600Z",
@@ -129,6 +130,72 @@ def test_signed_headers_excludes_blacklist():
     }
     result = _signed_headers(hdrs)
     assert result == "host;x-amz-date"
+
+
+# ---------------------------------------------------------------------------
+# Per-header exclusion tests
+#
+# Each of the headers in _HEADERS_TO_IGNORE must be excluded from the
+# canonical request and SignedHeaders, regardless of what the caller passes.
+# These are our own tests, not part of the AWS-provided test suite.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        # Explicitly listed by the AWS signing docs as volatile/hop-by-hop:
+        # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "user-agent",
+        "x-amzn-trace-id",
+        # Excluded for separate reasons (see signing.py _HEADERS_TO_IGNORE):
+        "authorization",  # contains the signature itself
+        "expect",  # hop-by-hop per RFC 9110 §10.1.1
+    ],
+)
+def test_ignored_header_excluded_from_canonical_headers(header):
+    """Every header in _HEADERS_TO_IGNORE must be absent from the canonical headers block."""
+    hdrs = {"host": "example.com", header: "some-value"}
+    result = _canonical_headers_str(hdrs)
+    assert header not in result
+    assert "host:example.com" in result
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "user-agent",
+        "x-amzn-trace-id",
+        "authorization",
+        "expect",
+    ],
+)
+def test_ignored_header_excluded_from_signed_headers(header):
+    """Every header in _HEADERS_TO_IGNORE must be absent from the SignedHeaders string."""
+    hdrs = {
+        "host": "example.com",
+        "x-amz-date": "20150830T123600Z",
+        header: "some-value",
+    }
+    result = _signed_headers(hdrs)
+    assert header not in result.split(";")
+    assert "host" in result.split(";")
 
 
 def test_signing_key_deterministic():

@@ -15,8 +15,22 @@ from urllib.parse import quote, urlsplit, parse_qsl
 
 from aws_sigv4.credentials import Credentials
 
-# Headers that must never be included in the signature (matches botocore).
-_HEADER_BLACKLIST = frozenset(
+# Headers excluded from the signature.
+#
+# The AWS docs specify that hop-by-hop and volatile transport headers must not
+# be signed because they are mutated by proxies, load balancers, and the nodes
+# in a distributed system:
+#   connection, x-amzn-trace-id, user-agent, keep-alive, transfer-encoding,
+#   te, trailer, upgrade, proxy-authorization, proxy-authenticate
+# https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+#
+# "authorization" is also excluded — it contains the signature itself and
+# cannot be an input to its own computation.
+#
+# "expect" is excluded because the Expect mechanism is hop-by-hop
+# (RFC 9110 §10.1.1) — intermediaries may consume or modify it before the
+# request reaches AWS, which would invalidate the signature.
+_HEADERS_TO_IGNORE = frozenset(
     [
         "authorization",
         "connection",
@@ -192,7 +206,7 @@ def _canonical_query_string(query: str) -> str:
 
 def _canonical_headers_str(headers: dict[str, str]) -> str:
     """Return the canonical headers block (no trailing newline)."""
-    filtered = {k: v for k, v in headers.items() if k not in _HEADER_BLACKLIST}
+    filtered = {k: v for k, v in headers.items() if k not in _HEADERS_TO_IGNORE}
     lines = []
     for key in sorted(filtered):
         # Collapse sequential whitespace to a single space and strip.
@@ -202,7 +216,7 @@ def _canonical_headers_str(headers: dict[str, str]) -> str:
 
 
 def _signed_headers(headers: dict[str, str]) -> str:
-    filtered = [k for k in headers if k not in _HEADER_BLACKLIST]
+    filtered = [k for k in headers if k not in _HEADERS_TO_IGNORE]
     return ";".join(sorted(filtered))
 
 

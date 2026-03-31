@@ -110,12 +110,17 @@ Steps per the [AWS SigV4 signing elements reference](https://docs.aws.amazon.com
 5. **Signature** — HMAC-SHA256 of string-to-sign with signing key, hex-encoded
 6. **Authorization header** — `AWS4-HMAC-SHA256 Credential=…, SignedHeaders=…, Signature=…`
 
-**Header blacklist** — the following headers are never included in the
-signature, as they are frequently mutated by proxies and load balancers (per
-the [AWS signing documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html#create-canonical-headers)):
-`authorization`, `connection`, `expect`, `keep-alive`, `proxy-authenticate`,
-`proxy-authorization`, `te`, `trailer`, `transfer-encoding`, `upgrade`,
-`user-agent`, `x-amzn-trace-id`.
+**Headers excluded from signing** — the following headers are never included
+in the signature. The [AWS signing documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html)
+specifies that hop-by-hop and volatile transport headers mutated by proxies,
+load balancers, and distributed system nodes must not be signed:
+`connection`, `keep-alive`, `proxy-authenticate`, `proxy-authorization`, `te`,
+`trailer`, `transfer-encoding`, `upgrade`, `user-agent`, `x-amzn-trace-id`.
+
+Additionally, `authorization` is excluded because it contains the signature
+itself, and `expect` is excluded because the Expect mechanism is hop-by-hop
+(RFC 9110 §10.1.1) and may be consumed or modified by intermediaries before
+the request reaches AWS.
 
 ---
 
