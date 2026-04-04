@@ -16,6 +16,17 @@ from aws_sigv4.providers.env import try_load_from_env
 from aws_sigv4.providers.imds import try_load_from_imds
 from aws_sigv4.providers.web_identity import WebIdentityProvider
 
+# Default provider chain — constructed once at module load time.
+# Each provider function re-reads env vars and files on every call, so
+# caching the list is safe and avoids repeated allocations.
+_DEFAULT_PROVIDERS: list[CredentialProvider] = [
+    try_load_from_env,
+    WebIdentityProvider().try_load,
+    try_load_from_config_file,
+    try_load_from_container,
+    try_load_from_imds,
+]
+
 
 def resolve_credentials(
     providers: list[CredentialProvider] | None = None,
@@ -50,16 +61,7 @@ def resolve_credentials(
     Raises:
         SigV4Error: If no provider in the chain can supply credentials.
     """
-    if providers is None:
-        providers = [
-            try_load_from_env,
-            WebIdentityProvider().try_load,
-            try_load_from_config_file,
-            try_load_from_container,
-            try_load_from_imds,
-        ]
-
-    chain = _ChainProvider(providers)
+    chain = _ChainProvider(providers if providers is not None else _DEFAULT_PROVIDERS)
     return RefreshableCredentials(chain)
 
 
