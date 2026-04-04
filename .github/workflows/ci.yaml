@@ -51,7 +51,7 @@ jobs:
         coverageFile: coverage.xml
         token: ${{ secrets.GITHUB_TOKEN }}
 
-  lint:
+  verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -80,7 +80,7 @@ jobs:
 
     needs:
       - tests
-      - lint
+      - verify
 
     runs-on: ubuntu-latest
 
