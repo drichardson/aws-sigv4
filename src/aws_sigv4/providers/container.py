@@ -98,9 +98,9 @@ def _parse_container_response(data: dict) -> Credentials:
                 token=token or None,
                 expires_at=parse_utc_datetime(expiration) if expiration else None,
             )
-        case (None | "", str()) | (str(), None | ""):
-            if not access_key:
-                raise SigV4Error("Container credentials response missing AccessKeyId")
+        case (None | "", str(sk)) if sk:
+            raise SigV4Error("Container credentials response missing AccessKeyId")
+        case (str(ak), None | "") if ak:
             raise SigV4Error("Container credentials response missing SecretAccessKey")
         case _:
             raise SigV4Error(
