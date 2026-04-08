@@ -1,0 +1,45 @@
+# https://taskfile.dev
+version: "3"
+
+tasks:
+  test:
+    desc: Run tests with coverage
+    cmd: uv run pytest
+    
+  lint:
+    desc: Check formatting and lint
+    cmd: uv run ruff format --check && uv run ruff check
+
+  format:
+    desc: Format code
+    cmd: uv run ruff format
+
+  typecheck:
+    desc: Run mypy type checker
+    cmd: uv run mypy src tests
+
+  check-deps:
+    desc: Enforce zero Python package runtime dependencies
+    cmd: scripts/check-no-runtime-deps.sh
+
+  check-security:
+    desc: "AST-based check for credential leak prevention (no print, no logging outside _log.py, literal-only exception messages, no type: ignore)"
+    cmd: uv run python scripts/check-no-credential-leaks.py
+
+  check:
+    desc: Run all checks (test, lint, typecheck, check-deps, check-security)
+    deps: [test, lint, typecheck, check-deps, check-security]
+
+  git-hook:
+    desc: Run by git hooks — update this task to change hook behaviour without reinstalling
+    deps: [test, lint, typecheck, check-security]
+
+  install-git-hooks:
+    desc: Install git hooks (pre-push). Only needs to be run once after cloning.
+    cmd: |
+      cat > .git/hooks/pre-push << 'EOF'
+      #!/usr/bin/env sh
+      task git-hook
+      EOF
+      chmod +x .git/hooks/pre-push
+      echo "Installed pre-push hook."

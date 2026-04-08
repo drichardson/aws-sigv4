@@ -1,0 +1,91 @@
+name: ci
+
+on: [push]
+
+env:
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      matrix:
+        python-version: ["3.14"]
+        resolution: ["highest", "lowest-direct"]
+        experimental: [false]
+        include:
+          - python-version: "3.15"
+            resolution: "highest"
+            experimental: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install go-task
+      uses: arduino/setup-task@v2
+
+    - name: Run Tests
+      run: task test
+      env:
+        UV_RESOLUTION: ${{ matrix.resolution }}
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      if: always() && matrix.python-version == '3.14' && matrix.resolution == 'highest'
+      with:
+        name: coverage-report
+        path: htmlcov/
+
+    - name: Coverage summary on PR
+      uses: orgoro/coverage@v3.2
+      if: github.event_name == 'pull_request' && matrix.python-version == '3.14' && matrix.resolution == 'highest'
+      with:
+        coverageFile: coverage.xml
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Install go-task
+      uses: arduino/setup-task@v2
+
+    - name: Formatting and checks
+      run: task lint
+
+    - name: Check Types
+      run: task typecheck
+
+    - name: Check no runtime dependencies
+      run: task check-deps
+
+    - name: Check no credential leaks
+      run: task check-security
+
+  check:
+    if: always()
+
+    needs:
+      - tests
+      - verify
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Decide whether the needed jobs succeeded or failed
+      uses: re-actors/alls-green@release/v1
+      with:
+        jobs: ${{ toJSON(needs) }}
