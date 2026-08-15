@@ -3,6 +3,7 @@
 
 """Tests for the Web Identity / IRSA provider."""
 
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 import pytest
@@ -194,7 +195,7 @@ def test_sts_malformed_xml_raises(httpserver, tmp_path):
     httpserver.expect_request("/", method="POST").respond_with_data(
         b"<not valid xml", content_type="text/xml"
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ET.ParseError):
         _make_provider(httpserver, tmp_path).try_load()
 
 

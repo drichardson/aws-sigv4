@@ -174,7 +174,7 @@ class RefreshableCredentials:
             # Advisory window — try to refresh; swallow errors and use cached.
             try:
                 self._do_refresh()
-            except Exception:
+            except Exception:  # noqa: BLE001 — any refresh failure falls back to cached creds
                 warning("Advisory credential refresh failed; using cached credentials")
 
         return self._credentials if self._credentials is not None else creds

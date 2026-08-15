@@ -139,7 +139,7 @@ def test_concurrent_gets_return_same_credentials():
     def worker():
         try:
             results.append(rc.get())
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — capture any error from any thread
             errors.append(e)
 
     threads = [threading.Thread(target=worker) for _ in range(10)]

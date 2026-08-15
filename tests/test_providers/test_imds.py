@@ -171,9 +171,11 @@ def test_raises_when_token_request_times_out(httpserver):
     timeout_err.reason = OSError(errno.ETIMEDOUT, "timed out")
     timeout_err.reason.errno = errno.ETIMEDOUT
 
-    with patch("sigv4.providers.imds._get_imds_token", side_effect=timeout_err):
-        with pytest.raises(urllib.error.URLError):
-            try_load_from_imds()
+    with (
+        patch("sigv4.providers.imds._get_imds_token", side_effect=timeout_err),
+        pytest.raises(urllib.error.URLError),
+    ):
+        try_load_from_imds()
 
 
 def test_returns_none_when_connection_refused(monkeypatch):
