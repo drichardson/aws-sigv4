@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -34,7 +35,6 @@ from sigv4.signing import (
     _string_to_sign,
     sign_headers,
 )
-from urllib.parse import urlsplit
 
 # ---------------------------------------------------------------------------
 # Constants

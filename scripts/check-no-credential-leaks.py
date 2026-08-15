@@ -93,29 +93,28 @@ def check_file(path: Path) -> None:
                             "import logging is banned — use sigv4._log.warning()",
                         )
 
-            if isinstance(node, ast.ImportFrom):
-                if node.module == "logging" or (
-                    node.module and node.module.startswith("logging.")
-                ):
-                    err(
-                        path,
-                        node.lineno,
-                        "from logging import ... is banned — use sigv4._log.warning()",
-                    )
+            if isinstance(node, ast.ImportFrom) and (
+                node.module == "logging"
+                or (node.module and node.module.startswith("logging."))
+            ):
+                err(
+                    path,
+                    node.lineno,
+                    "from logging import ... is banned — use sigv4._log.warning()",
+                )
 
-            if isinstance(node, ast.Call):
-                # Catch logger.warning(...), logging.warning(...), etc.
-                if isinstance(node.func, ast.Attribute):
-                    if isinstance(node.func.value, ast.Name) and node.func.value.id in (
-                        "logging",
-                        "logger",
-                        "_logger",
-                    ):
-                        err(
-                            path,
-                            node.lineno,
-                            f"{node.func.value.id}.{node.func.attr}() is banned — use sigv4._log.warning()",
-                        )
+            # Catch logger.warning(...), logging.warning(...), etc.
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in ("logging", "logger", "_logger")
+            ):
+                err(
+                    path,
+                    node.lineno,
+                    f"{node.func.value.id}.{node.func.attr}() is banned — use sigv4._log.warning()",
+                )
 
         # Rule 4 & 5: raise statements
         if isinstance(node, ast.Raise) and node.exc is not None:

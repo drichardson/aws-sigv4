@@ -22,12 +22,12 @@ import pytest
 from sigv4 import Credentials, sign_headers
 from sigv4.signing import (
     EMPTY_SHA256,
+    _canonical_headers_str,
     _canonical_query_string,
     _canonical_uri,
     _payload_hash,
-    _signing_key,
-    _canonical_headers_str,
     _signed_headers,
+    _signing_key,
 )
 
 # ---------------------------------------------------------------------------
@@ -344,16 +344,16 @@ def test_body_included_in_signing():
 
 def test_deterministic():
     """Same inputs must always produce the same signature."""
-    kwargs = dict(
-        method="GET",
-        url="https://example.amazonaws.com/",
-        headers={"host": "example.amazonaws.com"},
-        body=b"",
-        region=_REGION,
-        service=_SERVICE,
-        credentials=_CREDS,
-        timestamp=_TIMESTAMP,
-    )
+    kwargs = {
+        "method": "GET",
+        "url": "https://example.amazonaws.com/",
+        "headers": {"host": "example.amazonaws.com"},
+        "body": b"",
+        "region": _REGION,
+        "service": _SERVICE,
+        "credentials": _CREDS,
+        "timestamp": _TIMESTAMP,
+    }
     assert sign_headers(**kwargs) == sign_headers(**kwargs)
 
 

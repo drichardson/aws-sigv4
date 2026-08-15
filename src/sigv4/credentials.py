@@ -174,7 +174,7 @@ class RefreshableCredentials:
             # Advisory window — try to refresh; swallow errors and use cached.
             try:
                 self._do_refresh()
-            except Exception:
+            except Exception:  # noqa: BLE001 — any refresh failure falls back to cached creds
                 warning("Advisory credential refresh failed; using cached credentials")
 
         return self._credentials if self._credentials is not None else creds
@@ -209,7 +209,7 @@ def parse_utc_datetime(value: str) -> datetime:
     Handles the ``Z`` suffix used by AWS APIs (e.g. ``"2026-01-01T00:00:00Z"``),
     which ``datetime.fromisoformat`` does not accept prior to Python 3.11.
     """
-    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt

@@ -3,13 +3,13 @@
 
 """Tests for the Web Identity / IRSA provider."""
 
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 import pytest
 
 from sigv4.credentials import SigV4Error
 from sigv4.providers.web_identity import WebIdentityProvider, _parse_sts_response
-
 
 _ROLE_ARN = "arn:aws:iam::123456789012:role/MyRole"
 
@@ -51,7 +51,7 @@ def test_regional_sts_endpoint_used_when_configured(monkeypatch, tmp_path):
 
 def test_regional_sts_endpoint_falls_back_to_global_when_no_region(monkeypatch):
     """AWS_STS_REGIONAL_ENDPOINTS=regional but no region -> global endpoint."""
-    from sigv4.providers.web_identity import _resolve_sts_endpoint, _STS_ENDPOINT
+    from sigv4.providers.web_identity import _STS_ENDPOINT, _resolve_sts_endpoint
 
     monkeypatch.setenv("AWS_STS_REGIONAL_ENDPOINTS", "regional")
     monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
@@ -195,7 +195,7 @@ def test_sts_malformed_xml_raises(httpserver, tmp_path):
     httpserver.expect_request("/", method="POST").respond_with_data(
         b"<not valid xml", content_type="text/xml"
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ET.ParseError):
         _make_provider(httpserver, tmp_path).try_load()
 
 

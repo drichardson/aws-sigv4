@@ -11,9 +11,8 @@ Key invariants:
 
 import pytest
 
-from sigv4.credentials import SigV4Error, Credentials
+from sigv4.credentials import Credentials, SigV4Error
 from sigv4.resolve import resolve_credentials
-
 
 _CREDS = Credentials(access_key="AKID", secret_key="secret")
 
@@ -29,7 +28,6 @@ def test_chain_skips_none_providers():
 
     def first():
         order.append("first")
-        return None
 
     def second():
         order.append("second")
@@ -37,7 +35,6 @@ def test_chain_skips_none_providers():
 
     def third():
         order.append("third")
-        return None
 
     creds = resolve_credentials(providers=[first, second, third])
     creds.get()

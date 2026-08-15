@@ -6,9 +6,9 @@ Credential chain resolution.
 """
 
 from sigv4.credentials import (
-    SigV4Error,
     CredentialProvider,
     RefreshableCredentials,
+    SigV4Error,
 )
 from sigv4.providers.config_file import try_load_from_config_file
 from sigv4.providers.container import try_load_from_container

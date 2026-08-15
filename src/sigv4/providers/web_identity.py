@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from sigv4.credentials import SigV4Error, Credentials, parse_utc_datetime
+from sigv4.credentials import Credentials, SigV4Error, parse_utc_datetime
 
 _STS_ENDPOINT = "https://sts.amazonaws.com/"
 _STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/"
@@ -138,7 +138,7 @@ def _assume_role_with_web_identity(
 
 def _parse_sts_response(xml_bytes: bytes) -> Credentials:
     """Parse the STS XML response and return a Credentials instance."""
-    root = ET.fromstring(xml_bytes)  # noqa: S314 — parsing trusted AWS response
+    root = ET.fromstring(xml_bytes)
 
     ns = {"sts": _STS_NS}
 

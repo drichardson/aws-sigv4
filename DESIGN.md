@@ -159,7 +159,7 @@ Frozen dataclass. Immutable — a new instance is created on each refresh.
 class Credentials:
     access_key: str
     secret_key: str
-    token: str | None = None      # STS session token (IRSA, ECS, IMDS)
+    token: str | None = None  # STS session token (IRSA, ECS, IMDS)
     expires_at: datetime | None = None  # UTC; None for long-lived IAM creds
 ```
 
@@ -192,7 +192,7 @@ give adequate time for a retry if the first refresh attempt fails:
 **Pre-warming**:
 ```python
 creds = resolve_credentials()
-creds.refresh()   # fetch now, on your schedule
+creds.refresh()  # fetch now, on your schedule
 ```
 
 ---
