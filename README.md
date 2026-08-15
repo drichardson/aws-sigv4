@@ -53,7 +53,10 @@ creds = Credentials(
 headers = sign_headers(
     method="POST",
     url="https://dynamodb.us-east-1.amazonaws.com/",
-    headers={"host": "dynamodb.us-east-1.amazonaws.com", "content-type": "application/x-amz-json-1.0"},
+    headers={
+        "host": "dynamodb.us-east-1.amazonaws.com",
+        "content-type": "application/x-amz-json-1.0",
+    },
     body=b'{"TableName": "MyTable"}',
     region="us-east-1",
     service="dynamodb",
@@ -80,11 +83,11 @@ from sigv4 import resolve_credentials
 creds = resolve_credentials()
 
 # Check state
-print(creds.is_ready)       # False until first fetch
+print(creds.is_ready)  # False until first fetch
 print(creds.needs_refresh)  # True if in advisory refresh window
-print(creds.expires_at)     # datetime | None
+print(creds.expires_at)  # datetime | None
 
 # Pre-warm (blocks until credentials are fetched)
 creds.refresh()
-print(creds.is_ready)       # True
+print(creds.is_ready)  # True
 ```
