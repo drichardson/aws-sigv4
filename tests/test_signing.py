@@ -344,16 +344,16 @@ def test_body_included_in_signing():
 
 def test_deterministic():
     """Same inputs must always produce the same signature."""
-    kwargs = dict(
-        method="GET",
-        url="https://example.amazonaws.com/",
-        headers={"host": "example.amazonaws.com"},
-        body=b"",
-        region=_REGION,
-        service=_SERVICE,
-        credentials=_CREDS,
-        timestamp=_TIMESTAMP,
-    )
+    kwargs = {
+        "method": "GET",
+        "url": "https://example.amazonaws.com/",
+        "headers": {"host": "example.amazonaws.com"},
+        "body": b"",
+        "region": _REGION,
+        "service": _SERVICE,
+        "credentials": _CREDS,
+        "timestamp": _TIMESTAMP,
+    }
     assert sign_headers(**kwargs) == sign_headers(**kwargs)
 
 

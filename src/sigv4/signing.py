@@ -147,17 +147,7 @@ def _canonical_request(
     signed_hdrs = _signed_headers(headers)
     payload_hash = _payload_hash(body)
 
-    return "\n".join(
-        [
-            method.upper(),
-            canonical_uri,
-            canonical_qs,
-            canonical_hdrs,
-            "",  # canonical_hdrs already ends without newline; AWS spec wants blank line
-            signed_hdrs,
-            payload_hash,
-        ]
-    )
+    return f"{method.upper()}\n{canonical_uri}\n{canonical_qs}\n{canonical_hdrs}\n\n{signed_hdrs}\n{payload_hash}"
 
 
 def _canonical_uri(path: str) -> str:
@@ -235,7 +225,7 @@ def _string_to_sign(
 ) -> str:
     credential_scope = f"{date_stamp}/{region}/{service}/aws4_request"
     hashed_cr = hashlib.sha256(canonical_request.encode()).hexdigest()
-    return "\n".join([_ALGORITHM, amz_date, credential_scope, hashed_cr])
+    return f"{_ALGORITHM}\n{amz_date}\n{credential_scope}\n{hashed_cr}"
 
 
 def _hmac_sha256(key: bytes, msg: str) -> bytes:

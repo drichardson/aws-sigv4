@@ -71,5 +71,9 @@ def test_deterministic_output():
         service="s3",
         credentials=_static_refreshable(_CREDS),
     )
-    kwargs = dict(method="GET", url="https://s3.amazonaws.com/", timestamp=_TIMESTAMP)
+    kwargs = {
+        "method": "GET",
+        "url": "https://s3.amazonaws.com/",
+        "timestamp": _TIMESTAMP,
+    }
     assert signer.sign(**kwargs) == signer.sign(**kwargs)
