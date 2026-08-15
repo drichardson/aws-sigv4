@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import re
 from datetime import UTC, datetime
-from urllib.parse import quote, urlsplit, parse_qsl
+from urllib.parse import parse_qsl, quote, urlsplit
 
 from sigv4.credentials import Credentials
 

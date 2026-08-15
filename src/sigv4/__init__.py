@@ -28,22 +28,22 @@ High-level (credential resolution + auto-refresh + signing)::
 """
 
 from sigv4.credentials import (
-    SigV4Error,
     CredentialProvider,
     Credentials,
     CredentialsExpiredError,
     RefreshableCredentials,
+    SigV4Error,
 )
 from sigv4.resolve import resolve_credentials
-from sigv4.signing import sign_headers
 from sigv4.signer import Signer
+from sigv4.signing import sign_headers
 
 __all__ = [
-    "SigV4Error",
     "CredentialProvider",
     "Credentials",
     "CredentialsExpiredError",
     "RefreshableCredentials",
+    "SigV4Error",
     "Signer",
     "resolve_credentials",
     "sign_headers",

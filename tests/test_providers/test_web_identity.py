@@ -10,7 +10,6 @@ import pytest
 from sigv4.credentials import SigV4Error
 from sigv4.providers.web_identity import WebIdentityProvider, _parse_sts_response
 
-
 _ROLE_ARN = "arn:aws:iam::123456789012:role/MyRole"
 
 _STS_RESPONSE = b"""
@@ -51,7 +50,7 @@ def test_regional_sts_endpoint_used_when_configured(monkeypatch, tmp_path):
 
 def test_regional_sts_endpoint_falls_back_to_global_when_no_region(monkeypatch):
     """AWS_STS_REGIONAL_ENDPOINTS=regional but no region -> global endpoint."""
-    from sigv4.providers.web_identity import _resolve_sts_endpoint, _STS_ENDPOINT
+    from sigv4.providers.web_identity import _STS_ENDPOINT, _resolve_sts_endpoint
 
     monkeypatch.setenv("AWS_STS_REGIONAL_ENDPOINTS", "regional")
     monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)

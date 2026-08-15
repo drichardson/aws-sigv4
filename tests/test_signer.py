@@ -5,7 +5,6 @@
 
 from datetime import UTC, datetime
 
-
 from sigv4 import Credentials, RefreshableCredentials, Signer
 
 

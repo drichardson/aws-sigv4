@@ -27,7 +27,7 @@ import urllib.error
 import urllib.request
 
 from sigv4._log import warning
-from sigv4.credentials import SigV4Error, Credentials, parse_utc_datetime
+from sigv4.credentials import Credentials, SigV4Error, parse_utc_datetime
 
 # ECS link-local metadata host for relative URI credentials.
 # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html

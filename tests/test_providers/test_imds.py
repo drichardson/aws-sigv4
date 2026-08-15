@@ -165,7 +165,6 @@ def test_raises_when_credentials_code_not_success(httpserver):
 def test_raises_when_token_request_times_out(httpserver):
     """URLError that is NOT a not-present error (e.g. timeout simulation) -- raise."""
     import urllib.error
-
     from unittest.mock import patch
 
     timeout_err = urllib.error.URLError(OSError(errno.ETIMEDOUT, "timed out"))

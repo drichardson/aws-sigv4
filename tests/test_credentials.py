@@ -10,10 +10,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sigv4.credentials import (
-    SigV4Error,
     Credentials,
     CredentialsExpiredError,
     RefreshableCredentials,
+    SigV4Error,
     parse_utc_datetime,
 )
 
